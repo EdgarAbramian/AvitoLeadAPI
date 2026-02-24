@@ -19,6 +19,6 @@ async def webhook_lead_created(
     return {"status": "queued", "lead_id": event.payload.id}
 
 
-@LEAD_CREATED_ROUTER.post("/health")
+@LEAD_CREATED_ROUTER.get("/health")
 async def webhook_lead_created():
     return {"status": "ok"}
