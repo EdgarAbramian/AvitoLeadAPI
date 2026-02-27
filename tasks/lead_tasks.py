@@ -9,12 +9,12 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, max_retries=3)
-def process_lead_created(self, lead_id: str):
+def process_lead_created(self, lead_id: str, dealer_id: int):
     """Step 1: Get Lead Data From AutoHub"""
     logger.info(f"Starting processing lead_id: {lead_id}")
 
     try:
-        lead_data = asyncio.run(_async_process_lead_created(lead_id))
+        lead_data = asyncio.run(_async_process_lead_created(lead_id, dealer_id))
 
         if lead_data:
             logger.info(f"Lead data fetched, forwarding: {lead_data.get('id', lead_id)}")
@@ -28,13 +28,13 @@ def process_lead_created(self, lead_id: str):
 
 
 @shared_task(bind=True, max_retries=3)
-def send_lead_data_to_sap(self, lead_data: dict):
+def send_lead_data_to_sap(self, lead_data: dict, dealer_id: int):
     """Step 2: Send Lead Data To SAP"""
     lead_id = lead_data.get('id', 'unknown')
-    logger.info(f"Sending lead {lead_id} to SAP")
+    logger.info(f"Sending lead {lead_id} {dealer_id} to SAP")
 
     try:
-        asyncio.run(_async_send_lead_data_to_sap(lead_data=lead_data))
+        asyncio.run(_async_send_lead_data_to_sap(lead_data=lead_data, dealer_id=dealer_id))
         logger.info(f"Lead {lead_id} successfully sent to SAP")
 
     except Exception as e:

@@ -5,7 +5,7 @@ from utils import cfg
 from services import LeadService
 
 
-async def _async_process_lead_created(lead_id: str) -> dict:
+async def _async_process_lead_created(lead_id: str, dealer_id: int) -> dict:
     async with ClientSession(
             timeout=ClientTimeout(total=30),
             headers={
@@ -15,12 +15,13 @@ async def _async_process_lead_created(lead_id: str) -> dict:
     ) as session:
         lead_data = await LeadService.ah_get_select_lead(
             lead_id=lead_id,
+            dealer_id=dealer_id,
             session=session
         )
     return lead_data
 
 
-async def _async_send_lead_data_to_sap(lead_data: dict):
+async def _async_send_lead_data_to_sap(lead_data: dict, dealer_id: int):
     async with ClientSession(
             timeout=ClientTimeout(total=30),
     ) as session:

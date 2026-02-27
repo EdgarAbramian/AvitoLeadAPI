@@ -1,9 +1,8 @@
 import pytest
 import hashlib
+import json
 from unittest.mock import patch
-
 from schemas import LeadCreatedSchema
-
 from utils import cfg
 
 
@@ -18,81 +17,87 @@ def sample_event_data():
 
 
 @pytest.fixture
-def valid_signature(sample_event_data):
-    """Correct signature based on payload"""
-    event = LeadCreatedSchema.model_validate(sample_event_data)
-    event_json = event.model_dump_json(exclude_none=True)
-    data_to_sign = event_json + cfg.AUTOHUB_API_KEY
-    expected_signature = hashlib.sha256(data_to_sign.encode('utf-8')).hexdigest()
-    return hashlib.sha256(expected_signature.encode('utf-8')).hexdigest()
+def prepare_request():
+    def _prepare(data):
+        body_bytes = json.dumps(data, separators=(',', ':')).encode('utf-8')
+
+        hash_1 = hashlib.sha256(body_bytes + cfg.AUTOHUB_API_KEY.encode('utf-8')).hexdigest()
+        signature = hashlib.sha256(hash_1.encode('utf-8')).hexdigest()
+        return body_bytes, signature
+
+    return _prepare
 
 
 @pytest.fixture
-def invalid_signature():
-    return "invalid_signature_123"
-
-
-@pytest.fixture
-def mock_celery(monkeypatch):
-    """Monke Celery """
+def mock_celery():
+    """Mock Celery."""
     with patch('routers.lead_created.process_lead_created') as mock_task:
         mock_task.delay.return_value = "mocked_task_id"
-        monkeypatch.setattr('routers.lead_created.process_lead_created', mock_task)
         yield mock_task
 
 
 class TestWebhookLeadCreated:
 
-    def test_successful_lead_created(self, client, sample_event_data, valid_signature, mock_celery):
-        """Successful Test with mocked Celery"""
-        response = client.post(
-            "/webhook/lead-created/",
-            json=sample_event_data,
-            headers={"X-Sign": valid_signature}
-        )
-        assert response.status_code == 200
-        assert "queued" in response.json()["status"]
-        mock_celery.delay.assert_called_once_with(sample_event_data["payload"]["id"])
+    def test_successful_lead_created(self, client, sample_event_data, prepare_request, mock_celery):
+        """Successful Test"""
+        dealer_id = 123
+        body, sig = prepare_request(sample_event_data)
 
-    def test_invalid_signature(self, client, sample_event_data, invalid_signature="wrong_sig"):
-        """Error 401"""
         response = client.post(
-            "/webhook/lead-created/",
+            f"/webhook/lead-created/{dealer_id}",
+            content=body,
+            headers={"X-Sign": sig, "Content-Type": "application/json"}
+        )
+
+        assert response.status_code == 201
+        assert response.json()["lead_id"] == sample_event_data["payload"]["id"]
+        mock_celery.delay.assert_called_once_with(sample_event_data["payload"]["id"], dealer_id)
+
+    def test_invalid_signature(self, client, sample_event_data):
+        """401: Invalid sing"""
+        dealer_id = 123
+        response = client.post(
+            f"/webhook/lead-created/{dealer_id}",
             json=sample_event_data,
-            headers={"X-Sign": invalid_signature}
+            headers={"X-Sign": "wrong_signature_here"}
         )
         assert response.status_code == 401
-        assert "Invalid signature" in response.json()["detail"]
 
     def test_missing_signature_header(self, client, sample_event_data):
-        """Without X-Sign"""
-        response = client.post("/webhook/lead-created/", json=sample_event_data)
-
+        """422: Empty X-Sign"""
+        dealer_id = 123
+        response = client.post(f"/webhook/lead-created/{dealer_id}", json=sample_event_data)
         assert response.status_code == 422
-        assert "header" in response.json()["detail"][0]["loc"][0]
 
-    def test_invalid_event_structure(self, client, valid_signature):
+    def test_invalid_event_structure(self, client, prepare_request):
+        """422: Invalid JSON"""
+        dealer_id = 123
         invalid_data = {"name": "invalid"}
 
+        body, sig = prepare_request(invalid_data)
+
         response = client.post(
-            "/webhook/lead-created/",
-            json=invalid_data,
-            headers={"X-Sign": valid_signature}
+            f"/webhook/lead-created/{dealer_id}",
+            content=body,
+            headers={"X-Sign": sig, "Content-Type": "application/json"}
         )
 
         assert response.status_code == 422
+
         detail = response.json()["detail"]
-        assert any("uuid" in str(error) for error in detail)
-        assert any("payload" in str(error) for error in detail)
+
+        assert isinstance(detail, list)
+
+        error_locations = [err["loc"][-1] for err in detail]
+        assert "uuid" in error_locations
+        assert "payload" in error_locations
 
     def test_correct_signature_calculation(self, sample_event_data):
-        """Signature algo"""
-        event = LeadCreatedSchema.model_validate(sample_event_data)
+        """Sign Algo"""
+        raw_body = json.dumps(sample_event_data, separators=(',', ':')).encode('utf-8')
 
-        event_json = event.model_dump_json(exclude_none=True)
-        data_to_sign = event_json + cfg.AUTOHUB_API_KEY
-        signature_stage1 = hashlib.sha256(data_to_sign.encode('utf-8')).hexdigest()
-        test_signature = hashlib.sha256(signature_stage1.encode('utf-8')).hexdigest()
-        assert event.verify_signature(test_signature) == True
+        hash_1 = hashlib.sha256(raw_body + cfg.AUTOHUB_API_KEY.encode('utf-8')).hexdigest()
+        expected_sig = hashlib.sha256(hash_1.encode('utf-8')).hexdigest()
 
-        assert event.verify_signature("wrong_signature") == False
+        assert LeadCreatedSchema.verify_signature(raw_body, expected_sig) is True
+        assert LeadCreatedSchema.verify_signature(raw_body, "any_wrong_sig") is False
