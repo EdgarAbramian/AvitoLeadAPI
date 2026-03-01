@@ -3,16 +3,17 @@ from typing import Optional, Any, Dict
 
 import aiohttp
 from http import HTTPStatus
+from aiohttp import ClientSession, ClientTimeout
 
 from utils import cfg, exc
-from schemas.lead_created_schema import CreateWebHook
+from schemas import CreateWebHook
 
 logger = logging.getLogger(__name__)
 
 
-class LeadService:
+class MaxPosterClient:
     @staticmethod
-    async def ah_get_select_lead(
+    async def get_select_lead(
             lead_id: str,
             dealer_id: int,
             session: aiohttp.ClientSession
@@ -38,6 +39,7 @@ class LeadService:
             resp_code = res.status
 
             if resp_code != 200:
+                logger.error(f"Error processing lead_id: {lead_id} - resp_code: {resp_code} - resp_code: {await res.text()} ")
                 raise exc.MaxPosterAPIError(f"Error processing lead_id: {lead_id} - resp_code: {resp_code}")
 
             data = await res.json()
@@ -78,9 +80,40 @@ class LeadService:
             raise exc.MaxPosterAPIError(f"Network transport error: {e}")
 
     @staticmethod
-    async def sap_send_select_lead(
-            data: Dict[str, Any],
+    async def get_all_webhooks(
             session: aiohttp.ClientSession,
     ):
-        logger.info("Sending select lead request...")
-        raise NotImplemented()
+        url = f"https://api.maxposter.ru/partners-api/webhooks"
+
+        try:
+            async with session.get(url=url) as res:
+                resp_data = await res.json()
+
+                if res.status != HTTPStatus.OK:
+                    raise exc.MaxPosterAPIError(f"Error fetching webhooks list status: {res.status}")
+
+                if resp_data.get("status") != "success":
+                    raise exc.MaxPosterAPIError(f"MaxPoster status: {resp_data.get('status')}")
+                return resp_data.get("data", {}).get("webhooks", [])
+
+        except aiohttp.ClientError as e:
+            raise exc.MaxPosterAPIError(f"Network transport error: {e}")
+
+    @staticmethod
+    async def get_sign_by_dealer_id(dealer_id: int) -> Optional[str | None]:
+        """
+        Gets signToken by dealer_id
+
+        Returns:
+            Optional[str]: signToken if exists, else None.
+        """
+        async with ClientSession(
+                timeout=ClientTimeout(total=30),
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Basic {cfg.AUTOHUB_API_KEY}"
+                },
+        ) as session:
+            wh_list = await MaxPosterClient.get_all_webhooks(session=session)
+            wh_dict = {wh["dealerId"]: wh["signToken"] for wh in wh_list}
+            return wh_dict.get(dealer_id, None)

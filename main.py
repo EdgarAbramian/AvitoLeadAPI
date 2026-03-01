@@ -14,3 +14,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/health")
+async def webhook_lead_created():
+    return {"status": "ok"}

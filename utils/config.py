@@ -15,7 +15,6 @@ class Config(BaseSettings):
     )
 
     AUTOHUB_API_KEY: str
-    AUTOHUB_DEALER_ID: int
 
     REDIS_HOST: str = "localhost"
     REDIS_USER: Optional[str] = ""

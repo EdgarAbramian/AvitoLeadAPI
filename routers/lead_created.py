@@ -1,49 +1,30 @@
 import logging
 
-from fastapi import APIRouter, Header, HTTPException, status, Request
-from pydantic import ValidationError
+from fastapi import APIRouter, HTTPException, status, Depends
+
+from tasks import *
 
 from schemas import LeadCreatedSchema
-from tasks import *
+from services import WebhookValidator
 
 logger = logging.Logger(__name__)
 
 LEAD_CREATED_ROUTER = APIRouter()
+validate_lead_created = WebhookValidator(event_name="select.lead.created")
 
 
 @LEAD_CREATED_ROUTER.post(
-    "/webhook/lead-created/{dealer_id}",
+    "/webhook/lead_created/{dealer_id}",
     status_code=status.HTTP_201_CREATED
 )
 async def webhook_lead_created(
         dealer_id: int,
-        request: Request,
-        x_sign: str = Header(..., alias="X-Sign")
+        event: LeadCreatedSchema = Depends(validate_lead_created)
 ):
-    body_bytes = await request.body()
-
-    if not LeadCreatedSchema.verify_signature(body_bytes, x_sign):
-        logger.error(f"Invalid signature: {body_bytes}")
-        raise HTTPException(401, "Invalid signature")
-
-    try:
-        event = LeadCreatedSchema.model_validate_json(body_bytes)
-    except ValidationError as e:
-        logger.error(f"Validation error: {e.json()}")
-        raise HTTPException(422, detail=e.errors())
-
     try:
         process_lead_created.delay(event.payload.id, dealer_id)
     except Exception as e:
-        logger.critical(f"Error enqueue task lead_id: {event.model_dump()}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Queue is unavailable"
-        )
+        logger.critical(f"Queue error: {e}")
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Queue error")
 
     return {"status": "queued", "lead_id": event.payload.id}
-
-
-@LEAD_CREATED_ROUTER.get("/health")
-async def webhook_lead_created():
-    return {"status": "ok"}

@@ -4,8 +4,6 @@ from uuid import UUID
 from datetime import datetime
 from pydantic import BaseModel, HttpUrl, ConfigDict
 
-from utils import cfg
-
 
 class Payload(BaseModel):
     id: str
@@ -20,16 +18,17 @@ class LeadCreatedSchema(BaseModel):
     occurredAt: datetime
 
     @staticmethod
-    def verify_signature(raw_body: bytes, signature: str) -> bool:
-        """Compares sign with JSON"""
-        token = cfg.AUTOHUB_API_KEY.encode('utf-8')
-        data_to_sign = raw_body + token
+    def verify_signature(raw_body: bytes, signature: str, dealer_sing: str) -> bool:
+        """
+        sha256(body_bytes + token_bytes) -> hex_string
+        """
+        try:
+            data_to_hash = raw_body + dealer_sing.encode("utf-8")
+            computed_hash = hashlib.sha256(data_to_hash).hexdigest()
 
-        hash_1 = hashlib.sha256(data_to_sign).hexdigest()
-
-        final_hash = hashlib.sha256(hash_1.encode('utf-8')).hexdigest()
-
-        return hmac.compare_digest(final_hash, signature)
+            return hmac.compare_digest(computed_hash.lower(), signature.lower())
+        except Exception:
+            return False
 
 
 class CreateWebHook(BaseModel):
