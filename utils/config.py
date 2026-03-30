@@ -16,6 +16,10 @@ class Config(BaseSettings):
 
     AUTOHUB_API_KEY: str
 
+    SAP_URL: str
+    SAP_LOGIN: str
+    SAP_PASSWORD: str
+
     REDIS_HOST: str = "localhost"
     REDIS_USER: Optional[str] = ""
     REDIS_PORT: int = 6379

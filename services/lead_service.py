@@ -34,15 +34,19 @@ class MaxPosterClient:
         """
         url = (f"https://api.maxposter.ru/partners-api/select/leads/{lead_id}" +
                f"?dealer_id={dealer_id}") if dealer_id else ""
-
-        async with session.get(url=url) as res:
+        headers = {
+            "Authorization": f"Basic {cfg.AUTOHUB_API_KEY}",
+        }
+        async with session.get(url=url, headers=headers) as res:
             resp_code = res.status
 
             if resp_code != 200:
                 logger.error(f"Error processing lead_id: {lead_id} - resp_code: {resp_code} - resp_code: {await res.text()} ")
                 raise exc.MaxPosterAPIError(f"Error processing lead_id: {lead_id} - resp_code: {resp_code}")
 
-            data = await res.json()
+            res = await res.json()
+            data = res.get("data", {})
+
             logger.info(f"Lead {lead_id} retrieved {data}")
 
             return data
