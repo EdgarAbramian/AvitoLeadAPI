@@ -18,7 +18,7 @@ def process_lead_created(self, lead_id: str, dealer_id: int):
 
         if lead_data:
             logger.info(f"Lead data fetched, forwarding: {lead_data.get('id', lead_id)}")
-            send_lead_data_to_sap.delay(lead_data)
+            send_lead_data_to_sap.delay(lead_data, dealer_id)
         else:
             logger.warning(f"No data for lead_id: {lead_id}")
 
