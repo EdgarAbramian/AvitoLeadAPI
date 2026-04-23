@@ -25,6 +25,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   celery-worker:
     build: .
@@ -42,6 +44,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - api
 
@@ -55,5 +59,7 @@ services:
       - .env
     environment:
       <<: *common-vars
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - api
