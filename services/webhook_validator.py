@@ -31,7 +31,7 @@ class WebhookValidator:
 
         logger.info(
             f"INCOMING WEBHOOK | IP: {client_host} | URL: {request_url} | "
-            f"Dealer: {dealer_id} | X-Sign: {x_sign} | Body: {body_bytes.decode(errors='replace')}"
+            f"Dealer: {dealer_id} | X-Sign: {x_sign}"
         )
 
         try:
