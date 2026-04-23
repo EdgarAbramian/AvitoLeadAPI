@@ -31,7 +31,7 @@ services:
   celery-worker:
     build: .
     restart: unless-stopped
-    command: celery -A tasks.celery_app worker --loglevel=info -Q celery -c 2
+    command: celery -A tasks.celery_app worker --loglevel=info -Q celery -c 2 -E
     env_file:
       - .env
     environment:
@@ -52,13 +52,15 @@ services:
   celery-flower:
     build: .
     restart: unless-stopped
-    command: celery -A tasks.celery_app flower --port=5555
+    command: celery -A tasks.celery_app flower --port=5555 --persistent=True --db=/app/flower_db/flower.db
     ports:
       - "5555:5555"
     env_file:
       - .env
     environment:
       <<: *common-vars
+    volumes:
+      - ./flower_db:/app/flower_db
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
